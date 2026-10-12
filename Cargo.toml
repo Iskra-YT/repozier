@@ -2,7 +2,7 @@
 name = "repozier"
 version = "0.2.0"
 edition = "2024"
-description = "Losowe repozytorium z GitHuba prosto z terminala"
+description = "A random GitHub repository straight from the terminal"
 license = "MIT"
 repository = "https://github.com/Iskra-YT/repozier"
 readme = "README.md"

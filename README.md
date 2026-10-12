@@ -1,147 +1,147 @@
 # repozier
 
-Losowe repozytorium z GitHuba prosto z terminala.
+A random GitHub repository straight from the terminal.
 
-Odpalasz `repozier` i dostajesz link do losowego publicznego repozytorium.
+Run `repozier` and you get a link to a random public repository.
 
 ```console
 $ repozier
 https://github.com/rust-lang/mdBook
 ```
 
-## Instalacja
+## Installation
 
-Zbuduj z źródła (wymaga [Rusta](https://rustup.rs)):
+Build from source (requires [Rust](https://rustup.rs)):
 
 ```console
 $ cargo build --release
 $ ./target/release/repozier
 ```
 
-albo zainstaluj lokalnie, żeby `repozier` był dostępny w `PATH`:
+or install it locally so `repozier` is available in your `PATH`:
 
 ```console
 $ cargo install --path .
 ```
 
-## Użycie
+## Usage
 
 ```
-repozier — losowe repozytorium z GitHuba
+repozier — a random GitHub repository
 
 USAGE:
     repozier [OPTIONS]
 
-FILTRY:
-    -l, --language <JEZYK>        Filtruj po języku (np. rust, python, go)
-    -u, --user <UZYTKOWNIK>       Tylko repozytoria użytkownika lub organizacji
-    -o, --org <ORGANIZACJA>       Tylko repozytoria organizacji
-        --exclude-user <USER>     Wyklucz repozytoria użytkownika
-    -t, --topic <TEMAT>           Tylko z danym tematem (można podać wielokrotnie)
-        --name <TEKST>            Tylko gdy nazwa zawiera tekst
-        --license <LICENCJA>      Tylko na danej licencji (np. mit, apache-2.0)
-        --min-stars <N>           Minimalna liczba gwiazdek [default: 0]
-        --max-stars <N>           Maksymalna liczba gwiazdek
-        --min-forks <N>           Minimalna liczba forków
-        --max-forks <N>           Maksymalna liczba forków
-        --min-size <KB>           Minimalny rozmiar w kilobajtach
-        --max-size <KB>           Maksymalny rozmiar w kilobajtach
-        --created-after <DATA>    Utworzone po dacie (YYYY-MM-DD)
-        --created-before <DATA>   Utworzone przed datą (YYYY-MM-DD)
-        --pushed-after <DATA>     Ostatni push po dacie (YYYY-MM-DD)
-        --no-forks                Pomijaj forki
-        --no-archived             Pomijaj zarchiwizowane
-        --no-empty                Pomijaj puste repozytoria (bez zawartości)
-        --has-description         Tylko repozytoria z opisem
-        --mirror / --no-mirror    Tylko mirrory / bez mirrorów
-        --template / --no-template  Tylko szablony / bez szablonów
-        --has-issues / --no-issues  Z włączonymi / wyłączonymi Issues
-        --has-wiki / --no-wiki    Z włączonym / wyłączonym wiki
-        --has-pages / --no-pages  Z włączonym / wyłączonym GitHub Pages
-        --default-branch <NAZWA>  Tylko z daną domyślną gałęzią
+FILTERS:
+    -l, --language <LANGUAGE>     Filter by language (e.g. rust, python, go)
+    -u, --user <USER>             Only repositories of a user or organization
+    -o, --org <ORG>               Only repositories of an organization
+        --exclude-user <USER>     Exclude repositories of a user
+    -t, --topic <TOPIC>           Only with the given topic (may be repeated)
+        --name <TEXT>             Only when the name contains the text
+        --license <LICENSE>       Only under the given license (e.g. mit, apache-2.0)
+        --min-stars <N>           Minimum number of stars [default: 0]
+        --max-stars <N>           Maximum number of stars
+        --min-forks <N>           Minimum number of forks
+        --max-forks <N>           Maximum number of forks
+        --min-size <KB>           Minimum size in kilobytes
+        --max-size <KB>           Maximum size in kilobytes
+        --created-after <DATE>    Created after the date (YYYY-MM-DD)
+        --created-before <DATE>   Created before the date (YYYY-MM-DD)
+        --pushed-after <DATE>     Last pushed after the date (YYYY-MM-DD)
+        --no-forks                Skip forks
+        --no-archived             Skip archived repositories
+        --no-empty                Skip empty repositories (no content)
+        --has-description         Only repositories with a description
+        --mirror / --no-mirror    Only mirrors / skip mirrors
+        --template / --no-template  Only templates / skip templates
+        --has-issues / --no-issues  With Issues enabled / disabled
+        --has-wiki / --no-wiki    With the wiki enabled / disabled
+        --has-pages / --no-pages  With GitHub Pages enabled / disabled
+        --default-branch <NAME>   Only with the given default branch
 
-WYJŚCIE:
-    -n, --count <N>           Ile repozytoriów wypisać [default: 1]
-        --json                Wypisz wynik jako JSON
-        --open                Otwórz link w przeglądarce
-        --max-id <ID>         Górna granica losowanego ID (bez filtrów)
-        --token <TOKEN>       Token GitHub (domyślnie z GITHUB_TOKEN)
-    -h, --help                Pomoc
-    -V, --version             Wersja
+OUTPUT:
+    -n, --count <N>           How many repositories to print [default: 1]
+        --json                Print the result as JSON
+        --open                Open the link in the browser
+        --max-id <ID>         Upper bound of the random ID (without filters)
+        --token <TOKEN>       GitHub token (from GITHUB_TOKEN by default)
+    -h, --help                Help
+    -V, --version             Version
 ```
 
-Zawsze wybierane jest **losowe** repozytorium spełniające podane filtry —
-nie „pierwsze z listy” ani „najpopularniejsze”.
+A **random** repository matching the given filters is always selected —
+not "the first on the list" or "the most popular".
 
-### Przykłady
+### Examples
 
-Losowe repo w Rust z co najmniej 100 gwiazdkami:
+A random Rust repo with at least 100 stars:
 
 ```console
 $ repozier --language rust --min-stars 100
 ```
 
-Losowe repo od konkretnego użytkownika lub organizacji:
+A random repo from a specific user or organization:
 
 ```console
 $ repozier --user rust-lang
 $ repozier --org tokio-rs
 ```
 
-Trzy losowe repozytoria w Pythonie, bez forków i bez pustych:
+Three random Python repositories, without forks and without empty ones:
 
 ```console
 $ repozier -n 3 --language python --no-forks --no-empty
 ```
 
-Nowe, aktywne projekty na licencji MIT:
+New, active projects under the MIT license:
 
 ```console
 $ repozier --license mit --created-after 2024-01-01 --pushed-after 2025-01-01
 ```
 
-Repozytoria z danym tematem:
+Repositories with a given topic:
 
 ```console
 $ repozier --topic cli --language go --min-stars 500
 ```
 
-Wynik jako JSON (np. do dalszego przetwarzania):
+Output as JSON (e.g. for further processing):
 
 ```console
 $ repozier --json
 {"full_name":"owner/name","url":"https://github.com/owner/name", ...}
 ```
 
-## Token GitHub
+## GitHub token
 
-Bez tokenu działa publiczne API GitHuba z limitem ok. 60 zapytań na godzinę
-(wyszukiwarka: ok. 10 zapytań na minutę). Dla wyższego limitu ustaw token
-(nie musi mieć żadnych uprawnień, wystarczy publiczny dostęp do odczytu):
+Without a token, the public GitHub API is used with a limit of ~60 requests
+per hour (search: ~10 requests per minute). For a higher limit, set a token
+(it does not need any scopes, public read access is enough):
 
 ```console
 $ export GITHUB_TOKEN=ghp_xxx
 $ repozier
 ```
 
-Token można też podać flagą `--token`, ale zmienna środowiskowa jest
-bezpieczniejsza (nie trafia do historii powłoki).
+You can also pass the token with the `--token` flag, but the environment
+variable is safer (it does not end up in your shell history).
 
-## Jak losuje
+## How it picks a repository
 
-`repozier` działa w dwóch trybach:
+`repozier` works in two modes:
 
-- **Bez filtrów** korzysta z endpointu `/repositories?since=<id>`, który zwraca
-  publiczne repozytoria posortowane po ID. Losuje ID, pobiera stronę wyników
-  i wybiera losowe repo. Dzięki temu rozkład jest w praktyce równomierny
-  i nie zależy od popularności.
-- **Z filtrami** korzysta z wyszukiwarki `/search/repositories`, która obsługuje
-  wszystkie filtry po stronie GitHuba. Program pobiera losową stronę wyników
-  i wybiera losowe repozytorium z tej strony. Wyszukiwarka udostępnia tylko
-  pierwsze 1000 wyników, więc bardzo szerokie zapytania próbkują ten zakres.
+- **Without filters** it uses the `/repositories?since=<id>` endpoint, which
+  returns public repositories sorted by ID. It picks a random ID, fetches a
+  page of results and chooses a random repo. This makes the distribution
+  practically uniform and independent of popularity.
+- **With filters** it uses the `/search/repositories` search API, which handles
+  all filters server-side. The program fetches a random page of results and
+  picks a random repository from that page. The search API only exposes the
+  first 1000 results, so very broad queries sample that range.
 
-W obu trybach wybór jest zawsze losowy.
+In both modes the choice is always random.
 
-## Licencja
+## License
 
-MIT — zobacz [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).

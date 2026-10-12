@@ -1,4 +1,4 @@
-//! repozier — wypisuje link do losowego repozytorium z GitHuba.
+//! repozier — prints a link to a random GitHub repository.
 
 use std::collections::HashSet;
 use std::process::Command;
@@ -9,180 +9,180 @@ use clap::Parser;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-/// Górna granica ID repozytoriów. ID rosną z czasem, więc od czasu do czasu
-/// warto tę wartość podnieść. Jeśli losowe `since` wypadnie powyżej
-/// aktualnego maksimum, program sam zmniejszy zakres i spróbuje ponownie.
+/// Upper bound for repository IDs. IDs grow over time, so it is worth raising
+/// this value from time to time. If a random `since` lands above the current
+/// maximum, the program shrinks the range itself and retries.
 const DEFAULT_MAX_ID: u64 = 1_400_000_000;
-/// Ile repozytoriów GitHub zwraca na jedną stronę (maksymalnie 100).
+/// How many repositories GitHub returns per page (100 max).
 const PAGE_SIZE: u32 = 100;
-/// Rozmiar strony w wyszukiwarce GitHuba (maksymalnie 100).
+/// Page size in the GitHub search API (100 max).
 const SEARCH_PAGE_SIZE: u32 = 100;
-/// Ile razy próbować na jedno repozytorium, zanim uznamy filtry za zbyt wąskie.
+/// How many attempts per repository before we consider the filters too narrow.
 const MAX_ATTEMPTS_PER_REPO: usize = 20;
-/// Wyszukiwarka GitHuba udostępnia tylko pierwsze 1000 wyników.
+/// The GitHub search API only exposes the first 1000 results.
 const SEARCH_MAX_RESULTS: u64 = 1000;
-/// Maksymalny numer strony w wyszukiwarce przy `SEARCH_PAGE_SIZE`.
+/// Maximum page number in the search API with `SEARCH_PAGE_SIZE`.
 const SEARCH_MAX_PAGES: u64 = SEARCH_MAX_RESULTS / SEARCH_PAGE_SIZE as u64;
-/// Maksymalna liczba zapytań do wyszukiwarki na jedno uruchomienie.
+/// Maximum number of search API requests per run.
 const SEARCH_MAX_REQUESTS: usize = 8;
 
 #[derive(Parser, Debug)]
 #[command(
     name = "repozier",
     version,
-    about = "Losowe repozytorium z GitHuba prosto z terminala",
-    after_help = "Bez tokenu obowiązuje limit ~60 zapytań/h (wyszukiwarka: ~10/min).\nUstaw GITHUB_TOKEN, aby podnieść limity.\n\nZawsze wybierane jest losowe repozytorium spełniające podane filtry."
+    about = "A random GitHub repository straight from the terminal",
+    after_help = "Without a token the limit is ~60 requests/h (search: ~10/min).\nSet GITHUB_TOKEN to raise the limits.\n\nA random repository matching the given filters is always selected."
 )]
 struct Cli {
-    /// Ile repozytoriów wypisać
+    /// How many repositories to print
     #[arg(short = 'n', long, default_value_t = 1)]
     count: usize,
 
-    /// Filtruj po języku programowania (np. rust, python, go)
-    #[arg(short = 'l', long, value_name = "JEZYK")]
+    /// Filter by programming language (e.g. rust, python, go)
+    #[arg(short = 'l', long, value_name = "LANGUAGE")]
     language: Option<String>,
 
-    /// Tylko repozytoria użytkownika lub organizacji
-    #[arg(short = 'u', long, value_name = "UZYTKOWNIK")]
+    /// Only repositories of the given user or organization
+    #[arg(short = 'u', long, value_name = "USER")]
     user: Option<String>,
 
-    /// Tylko repozytoria organizacji
-    #[arg(short = 'o', long, value_name = "ORGANIZACJA")]
+    /// Only repositories of the given organization
+    #[arg(short = 'o', long, value_name = "ORG")]
     org: Option<String>,
 
-    /// Wyklucz repozytoria danego użytkownika (można podać wielokrotnie)
-    #[arg(long, value_name = "UZYTKOWNIK")]
+    /// Exclude repositories of the given user (may be given multiple times)
+    #[arg(long, value_name = "USER")]
     exclude_user: Option<String>,
 
-    /// Tylko repozytoria z danym tematem (można podać wielokrotnie)
-    #[arg(short = 't', long = "topic", value_name = "TEMAT")]
+    /// Only repositories with the given topic (may be given multiple times)
+    #[arg(short = 't', long = "topic", value_name = "TOPIC")]
     topic: Vec<String>,
 
-    /// Tylko repozytoria, których nazwa zawiera podany tekst
-    #[arg(long, value_name = "TEKST")]
+    /// Only repositories whose name contains the given text
+    #[arg(long, value_name = "TEXT")]
     name: Option<String>,
 
-    /// Tylko repozytoria na danej licencji (np. mit, apache-2.0)
-    #[arg(long, value_name = "LICENCJA")]
+    /// Only repositories under the given license (e.g. mit, apache-2.0)
+    #[arg(long, value_name = "LICENSE")]
     license: Option<String>,
 
-    /// Minimalna liczba gwiazdek
+    /// Minimum number of stars
     #[arg(long, default_value_t = 0, value_name = "N")]
     min_stars: u64,
 
-    /// Maksymalna liczba gwiazdek
+    /// Maximum number of stars
     #[arg(long, value_name = "N")]
     max_stars: Option<u64>,
 
-    /// Minimalna liczba forków
+    /// Minimum number of forks
     #[arg(long, value_name = "N")]
     min_forks: Option<u64>,
 
-    /// Maksymalna liczba forków
+    /// Maximum number of forks
     #[arg(long, value_name = "N")]
     max_forks: Option<u64>,
 
-    /// Minimalny rozmiar repozytorium w kilobajtach
+    /// Minimum repository size in kilobytes
     #[arg(long, value_name = "KB")]
     min_size: Option<u64>,
 
-    /// Maksymalny rozmiar repozytorium w kilobajtach
+    /// Maximum repository size in kilobytes
     #[arg(long, value_name = "KB")]
     max_size: Option<u64>,
 
-    /// Tylko repozytoria utworzone po dacie (YYYY-MM-DD)
-    #[arg(long, value_name = "DATA")]
+    /// Only repositories created after the date (YYYY-MM-DD)
+    #[arg(long, value_name = "DATE")]
     created_after: Option<String>,
 
-    /// Tylko repozytoria utworzone przed datą (YYYY-MM-DD)
-    #[arg(long, value_name = "DATA")]
+    /// Only repositories created before the date (YYYY-MM-DD)
+    #[arg(long, value_name = "DATE")]
     created_before: Option<String>,
 
-    /// Tylko repozytoria z ostatnim pushem po dacie (YYYY-MM-DD)
-    #[arg(long, value_name = "DATA")]
+    /// Only repositories last pushed after the date (YYYY-MM-DD)
+    #[arg(long, value_name = "DATE")]
     pushed_after: Option<String>,
 
-    /// Pomijaj forki
+    /// Skip forks
     #[arg(long)]
     no_forks: bool,
 
-    /// Pomijaj zarchiwizowane repozytoria
+    /// Skip archived repositories
     #[arg(long)]
     no_archived: bool,
 
-    /// Pomijaj puste repozytoria (bez żadnej zawartości)
+    /// Skip empty repositories (no content)
     #[arg(long)]
     no_empty: bool,
 
-    /// Tylko repozytoria z opisem
+    /// Only repositories with a description
     #[arg(long)]
     has_description: bool,
 
-    /// Tylko repozytoria będące mirrorami
+    /// Only mirror repositories
     #[arg(long)]
     mirror: bool,
 
-    /// Pomijaj mirrory
+    /// Skip mirrors
     #[arg(long)]
     no_mirror: bool,
 
-    /// Tylko repozytoria szablonowe (template)
+    /// Only template repositories
     #[arg(long)]
     template: bool,
 
-    /// Pomijaj repozytoria szablonowe (template)
+    /// Skip template repositories
     #[arg(long)]
     no_template: bool,
 
-    /// Tylko repozytoria z włączonymi Issues
+    /// Only repositories with Issues enabled
     #[arg(long)]
     has_issues: bool,
 
-    /// Tylko repozytoria z wyłączonymi Issues
+    /// Only repositories with Issues disabled
     #[arg(long)]
     no_issues: bool,
 
-    /// Tylko repozytoria z włączonym wiki
+    /// Only repositories with the wiki enabled
     #[arg(long)]
     has_wiki: bool,
 
-    /// Tylko repozytoria z wyłączonym wiki
+    /// Only repositories with the wiki disabled
     #[arg(long)]
     no_wiki: bool,
 
-    /// Tylko repozytoria z włączonym GitHub Pages
+    /// Only repositories with GitHub Pages enabled
     #[arg(long)]
     has_pages: bool,
 
-    /// Tylko repozytoria z wyłączonym GitHub Pages
+    /// Only repositories with GitHub Pages disabled
     #[arg(long)]
     no_pages: bool,
 
-    /// Tylko repozytoria z daną domyślną gałęzią
-    #[arg(long, value_name = "NAZWA")]
+    /// Only repositories with the given default branch
+    #[arg(long, value_name = "NAME")]
     default_branch: Option<String>,
 
-    /// Wypisz wynik jako JSON
+    /// Print the result as JSON
     #[arg(long)]
     json: bool,
 
-    /// Otwórz link w przeglądarce
+    /// Open the link in the browser
     #[arg(long)]
     open: bool,
 
-    /// Górna granica losowanego ID (zaawansowane, tylko bez filtrów)
+    /// Upper bound of the random ID (advanced, only without filters)
     #[arg(long, value_name = "ID")]
     max_id: Option<u64>,
 
-    /// Token GitHub (domyślnie brany ze zmiennej GITHUB_TOKEN)
+    /// GitHub token (taken from the GITHUB_TOKEN variable by default)
     #[arg(long, env = "GITHUB_TOKEN", hide_env_values = true, value_name = "TOKEN")]
     token: Option<String>,
 }
 
 impl Cli {
-    /// Czy podano jakikolwiek filtr treści? Jeśli tak, losujemy przez
-    /// wyszukiwarkę GitHuba (obsługuje filtry serwerowo). W przeciwnym razie
-    /// skanujemy ID, co daje równomierny rozkład po całym GitHubie.
+    /// Was any content filter given? If so, we pick via the GitHub search API
+    /// (it handles filters server-side). Otherwise we scan IDs, which yields a
+    /// uniform distribution across all of GitHub.
     fn has_filters(&self) -> bool {
         self.language.is_some()
             || self.user.is_some()
@@ -218,7 +218,7 @@ impl Cli {
     }
 }
 
-/// Podzbiór pól zwracanych przez API GitHuba, których potrzebujemy.
+/// A subset of the fields returned by the GitHub API that we need.
 #[derive(Debug, Clone, Deserialize)]
 struct Repo {
     id: u64,
@@ -234,7 +234,7 @@ struct Repo {
     stargazers_count: u64,
     #[serde(default)]
     forks_count: u64,
-    /// Rozmiar repozytorium w kilobajtach; 0 oznacza repozytorium bez zawartości.
+    /// Repository size in kilobytes; 0 means a repository with no content.
     #[serde(default)]
     size: u64,
     #[serde(default)]
@@ -280,21 +280,21 @@ struct License {
     name: String,
 }
 
-/// Odpowiedź wyszukiwarki `/search/repositories`.
+/// Response of the `/search/repositories` search API.
 #[derive(Debug, Deserialize)]
 struct SearchResponse {
     total_count: u64,
     items: Vec<Repo>,
 }
 
-/// Kształt komunikatu błędu z API GitHuba.
+/// Shape of an error message from the GitHub API.
 #[derive(Debug, Deserialize)]
 struct ApiError {
     #[serde(default)]
     message: Option<String>,
 }
 
-/// Kształt wyniku dla `--json`.
+/// Output shape for `--json`.
 #[derive(Debug, Serialize)]
 struct RepoOut {
     full_name: String,
@@ -355,11 +355,11 @@ fn run() -> Result<()> {
     let cli = Cli::parse();
 
     if cli.count == 0 {
-        bail!("--count musi być większe od zera");
+        bail!("--count must be greater than zero");
     }
 
     if cli.max_id.is_some() && cli.has_filters() {
-        eprintln!("repozier: --max-id działa tylko bez filtrów — ignoruję");
+        eprintln!("repozier: --max-id only works without filters — ignoring it");
     }
 
     let agent: ureq::Agent = ureq::Agent::config_builder()
@@ -381,7 +381,7 @@ fn run() -> Result<()> {
     if cli.open {
         for repo in &repos {
             if let Err(err) = open_url(&repo.html_url) {
-                eprintln!("repozier: nie udało się otworzyć {}: {err}", repo.html_url);
+                eprintln!("repozier: failed to open {}: {err}", repo.html_url);
             }
         }
     }
@@ -389,7 +389,7 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-/// Drukuje wyniki jako JSON (obiekt przy jednym repo, tablica przy wielu).
+/// Prints the results as JSON (an object for one repo, an array for many).
 fn print_json(repos: &[Repo]) -> Result<()> {
     let out: Vec<RepoOut> = repos.iter().map(RepoOut::from).collect();
     if out.len() == 1 {
@@ -400,7 +400,7 @@ fn print_json(repos: &[Repo]) -> Result<()> {
     Ok(())
 }
 
-/// Losuje `count` różnych repozytoriów spełniających kryteria.
+/// Picks `count` distinct repositories matching the criteria.
 fn pick_many(cli: &Cli, agent: &ureq::Agent, token: Option<&str>) -> Result<Vec<Repo>> {
     if cli.has_filters() {
         pick_by_search(cli, agent, token)
@@ -409,14 +409,14 @@ fn pick_many(cli: &Cli, agent: &ureq::Agent, token: Option<&str>) -> Result<Vec<
     }
 }
 
-/// Losowanie bez filtrów: skanuje publiczne ID, dzięki czemu każde
-/// repozytorium ma w przybliżeniu równą szansę, niezależnie od popularności.
+/// Picking without filters: scans public IDs, so every repository has roughly
+/// the same chance regardless of popularity.
 fn pick_by_scan(cli: &Cli, agent: &ureq::Agent, token: Option<&str>) -> Result<Vec<Repo>> {
     let mut chosen: Vec<Repo> = Vec::with_capacity(cli.count);
     let mut seen: HashSet<u64> = HashSet::new();
     let mut max_id = cli.max_id.unwrap_or(DEFAULT_MAX_ID);
 
-    // Każde trafienie kosztuje jedno zapytanie; dajemy zapas na odrzucone wyniki.
+    // Every attempt costs one request; we add slack for rejected results.
     let budget = MAX_ATTEMPTS_PER_REPO * cli.count;
     for _ in 0..budget {
         if chosen.len() == cli.count {
@@ -427,7 +427,7 @@ fn pick_by_scan(cli: &Cli, agent: &ureq::Agent, token: Option<&str>) -> Result<V
         let page = fetch_page(agent, token, since)?;
 
         if page.is_empty() {
-            // Losowe `since` wypadło powyżej aktualnego maksimum ID.
+            // The random `since` landed above the current maximum ID.
             max_id = max_id.min(since.saturating_sub(1)).max(1);
             continue;
         }
@@ -443,8 +443,8 @@ fn pick_by_scan(cli: &Cli, agent: &ureq::Agent, token: Option<&str>) -> Result<V
                 break;
             }
             if seen.insert(repo.id) {
-                // Skanowany listing nie zawiera wszystkich pól (m.in. gwiazdek,
-                // rozmiaru), więc na potrzeby `--json` dociągamy pełne dane.
+                // The scanned listing does not include all fields (e.g. stars,
+                // size), so for `--json` we fetch the full data.
                 let full = if cli.json {
                     fetch_repo(agent, token, &repo.full_name)?
                 } else {
@@ -457,7 +457,7 @@ fn pick_by_scan(cli: &Cli, agent: &ureq::Agent, token: Option<&str>) -> Result<V
 
     if chosen.len() < cli.count {
         bail!(
-            "znaleziono {} z {} repozytoriów — spróbuj poluzować filtry",
+            "found {} of {} repositories — try relaxing the filters",
             chosen.len(),
             cli.count
         );
@@ -466,14 +466,14 @@ fn pick_by_scan(cli: &Cli, agent: &ureq::Agent, token: Option<&str>) -> Result<V
     Ok(chosen)
 }
 
-/// Losowanie z filtrami: korzysta z wyszukiwarki GitHuba (obsługuje wszystkie
-/// filtry serwerowo) i wybiera losową stronę oraz losowy wynik z tej strony.
+/// Picking with filters: uses the GitHub search API (it handles all filters
+/// server-side) and picks a random page and a random result from that page.
 fn pick_by_search(cli: &Cli, agent: &ureq::Agent, token: Option<&str>) -> Result<Vec<Repo>> {
     let query = search_query(cli);
     let mut chosen: Vec<Repo> = Vec::with_capacity(cli.count);
     let mut seen: HashSet<u64> = HashSet::new();
     let mut tried: HashSet<u64> = HashSet::new();
-    // Liczba stron poznana dopiero po pierwszej odpowiedzi (total_count).
+    // The number of pages is only known after the first response (total_count).
     let mut pages: Option<u64> = None;
 
     for _ in 0..SEARCH_MAX_REQUESTS {
@@ -481,7 +481,7 @@ fn pick_by_search(cli: &Cli, agent: &ureq::Agent, token: Option<&str>) -> Result
             break;
         }
 
-        // Pierwszą stronę losujemy na ślepo, kolejne już w znanym zakresie.
+        // We pick the first page blindly, the next ones within the known range.
         let page = match pages {
             Some(pages) => match random_page(pages, &tried) {
                 Some(page) => page,
@@ -494,12 +494,12 @@ fn pick_by_search(cli: &Cli, agent: &ureq::Agent, token: Option<&str>) -> Result
         let response = fetch_search(agent, token, &query, page)?;
         let total = response.total_count.min(SEARCH_MAX_RESULTS);
         if total == 0 {
-            bail!("brak repozytoriów spełniających podane filtry");
+            bail!("no repositories match the given filters");
         }
         let known_pages = total.div_ceil(SEARCH_PAGE_SIZE as u64).max(1);
         pages = Some(known_pages);
 
-        // Trafiliśmy poza zakres (np. mało wyników) — spróbuj ponownie.
+        // We landed out of range (e.g. few results) — try again.
         if page > known_pages {
             continue;
         }
@@ -523,7 +523,7 @@ fn pick_by_search(cli: &Cli, agent: &ureq::Agent, token: Option<&str>) -> Result
 
     if chosen.len() < cli.count {
         bail!(
-            "znaleziono {} z {} repozytoriów — spróbuj poluzować filtry lub ustawić GITHUB_TOKEN",
+            "found {} of {} repositories — try relaxing the filters or setting GITHUB_TOKEN",
             chosen.len(),
             cli.count
         );
@@ -532,7 +532,7 @@ fn pick_by_search(cli: &Cli, agent: &ureq::Agent, token: Option<&str>) -> Result
     Ok(chosen)
 }
 
-/// Losuje nieodwiedzoną jeszcze stronę wyników (1..=pages).
+/// Picks a not-yet-visited page of results (1..=pages).
 fn random_page(pages: u64, tried: &HashSet<u64>) -> Option<u64> {
     let candidates: Vec<u64> = (1..=pages).filter(|page| !tried.contains(page)).collect();
     if candidates.is_empty() {
@@ -542,7 +542,7 @@ fn random_page(pages: u64, tried: &HashSet<u64>) -> Option<u64> {
     }
 }
 
-/// Buduje zapytanie do wyszukiwarki GitHuba na podstawie filtrów.
+/// Builds a GitHub search query from the filters.
 fn search_query(cli: &Cli) -> String {
     let mut q = String::from("is:public");
 
@@ -607,7 +607,7 @@ fn search_query(cli: &Cli) -> String {
     q
 }
 
-/// Wykonuje zapytanie GET i deserializuje odpowiedź JSON.
+/// Performs a GET request and deserializes the JSON response.
 fn get_json<T: DeserializeOwned>(
     agent: &ureq::Agent,
     token: Option<&str>,
@@ -630,7 +630,7 @@ fn get_json<T: DeserializeOwned>(
 
     let mut response = request
         .call()
-        .map_err(|err| anyhow::anyhow!("błąd połączenia z GitHubem: {err}"))?;
+        .map_err(|err| anyhow::anyhow!("connection to GitHub failed: {err}"))?;
 
     let status = response.status();
     let body = response.body_mut().read_to_string()?;
@@ -642,7 +642,7 @@ fn get_json<T: DeserializeOwned>(
     Ok(serde_json::from_str(&body)?)
 }
 
-/// Pobiera jedną stronę publicznych repozytoriów o ID większym niż `since`.
+/// Fetches one page of public repositories with an ID greater than `since`.
 fn fetch_page(agent: &ureq::Agent, token: Option<&str>, since: u64) -> Result<Vec<Repo>> {
     get_json(
         agent,
@@ -655,13 +655,13 @@ fn fetch_page(agent: &ureq::Agent, token: Option<&str>, since: u64) -> Result<Ve
     )
 }
 
-/// Pobiera pełne dane pojedynczego repozytorium.
+/// Fetches the full data of a single repository.
 fn fetch_repo(agent: &ureq::Agent, token: Option<&str>, full_name: &str) -> Result<Repo> {
     let url = format!("https://api.github.com/repos/{full_name}");
     get_json(agent, token, &url, &[])
 }
 
-/// Pobiera jedną stronę wyników wyszukiwarki.
+/// Fetches one page of search results.
 fn fetch_search(
     agent: &ureq::Agent,
     token: Option<&str>,
@@ -680,14 +680,14 @@ fn fetch_search(
     )
 }
 
-/// Zamienia błąd HTTP GitHuba na czytelny komunikat (z treścią od GitHuba).
+/// Turns a GitHub HTTP error into a readable message (including GitHub's own text).
 fn api_error(status: u16, body: &str) -> anyhow::Error {
     let hint = match status {
-        401 => "nieprawidłowy lub wygasły token GitHub",
-        403 | 429 => "limit API GitHuba wyczerpany — ustaw GITHUB_TOKEN lub spróbuj później",
-        404 => "nie znaleziono zasobu",
-        422 => "nieprawidłowe filtry (sprawdź daty i nazwy) lub zbyt głęboka paginacja",
-        _ => "nieoczekiwana odpowiedź GitHuba",
+        401 => "invalid or expired GitHub token",
+        403 | 429 => "GitHub API limit exhausted — set GITHUB_TOKEN or try again later",
+        404 => "resource not found",
+        422 => "invalid filters (check dates and names) or pagination too deep",
+        _ => "unexpected response from GitHub",
     };
 
     match serde_json::from_str::<ApiError>(body)
@@ -695,12 +695,12 @@ fn api_error(status: u16, body: &str) -> anyhow::Error {
         .and_then(|err| err.message)
         .filter(|msg| !msg.is_empty())
     {
-        Some(message) => anyhow::anyhow!("GitHub zwrócił HTTP {status} ({hint}): {message}"),
-        None => anyhow::anyhow!("GitHub zwrócił HTTP {status} ({hint})"),
+        Some(message) => anyhow::anyhow!("GitHub returned HTTP {status} ({hint}): {message}"),
+        None => anyhow::anyhow!("GitHub returned HTTP {status} ({hint})"),
     }
 }
 
-/// Sprawdza, czy repozytorium przechodzi wszystkie filtry z linii poleceń.
+/// Checks whether a repository passes all command-line filters.
 fn matches(repo: &Repo, cli: &Cli) -> bool {
     if cli.no_forks && repo.fork {
         return false;
@@ -835,33 +835,33 @@ fn matches(repo: &Repo, cli: &Cli) -> bool {
     true
 }
 
-/// Czy repozytorium ma niepusty opis?
+/// Does the repository have a non-empty description?
 fn has_description(repo: &Repo) -> bool {
     repo.description
         .as_deref()
         .is_some_and(|d| !d.trim().is_empty())
 }
 
-/// Czy data ISO 8601 jest równa lub późniejsza niż podana data (YYYY-MM-DD)?
-/// Porównanie leksykalne działa, bo format ISO 8601 sortuje się leksykalnie.
+/// Is the ISO 8601 date equal to or later than the given date (YYYY-MM-DD)?
+/// Lexicographic comparison works because ISO 8601 sorts lexicographically.
 fn date_at_least(actual: Option<&str>, wanted: &str) -> bool {
     actual.is_some_and(|date| date >= wanted)
 }
 
-/// Czy data ISO 8601 jest wcześniejsza niż podana data (YYYY-MM-DD)?
+/// Is the ISO 8601 date earlier than the given date (YYYY-MM-DD)?
 fn date_before(actual: Option<&str>, wanted: &str) -> bool {
     actual.is_some_and(|date| date < wanted)
 }
 
 
-/// Czy właściciel repozytorium to podany login (bez rozróżniania wielkości liter)?
+/// Is the repository owner the given login (case-insensitive)?
 fn owner_is(repo: &Repo, login: &str) -> bool {
     repo.owner
         .as_ref()
         .is_some_and(|owner| owner.login.eq_ignore_ascii_case(login))
 }
 
-/// Czy licencja repozytorium pasuje do podanej nazwy (klucz, SPDX lub nazwa)?
+/// Does the repository license match the given name (key, SPDX or name)?
 fn license_matches(repo: &Repo, wanted: &str) -> bool {
     match &repo.license {
         Some(license) => {
@@ -876,7 +876,7 @@ fn license_matches(repo: &Repo, wanted: &str) -> bool {
     }
 }
 
-/// Zwraca czytelną etykietę licencji (SPDX, a gdy brak — klucz).
+/// Returns a readable license label (SPDX, or the key when missing).
 fn license_label(license: &License) -> Option<String> {
     [license.spdx_id.as_deref(), Some(license.key.as_str())]
         .into_iter()
@@ -885,7 +885,7 @@ fn license_label(license: &License) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Otwiera URL w domyślnej przeglądarce użytkownika.
+/// Opens a URL in the user's default browser.
 fn open_url(url: &str) -> Result<()> {
     let status = if cfg!(target_os = "macos") {
         Command::new("open").arg(url).status()
@@ -894,10 +894,10 @@ fn open_url(url: &str) -> Result<()> {
     } else {
         Command::new("xdg-open").arg(url).status()
     }
-    .map_err(|e| anyhow::anyhow!("nie można uruchomić przeglądarki: {e}"))?;
+    .map_err(|e| anyhow::anyhow!("could not launch the browser: {e}"))?;
 
     if !status.success() {
-        bail!("przeglądarka zwróciła kod {}", status.code().unwrap_or(-1));
+        bail!("browser returned code {}", status.code().unwrap_or(-1));
     }
     Ok(())
 }
