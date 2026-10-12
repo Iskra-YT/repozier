@@ -45,6 +45,10 @@ struct Cli {
     #[arg(long)]
     no_archived: bool,
 
+    /// Pomijaj puste repozytoria (bez żadnej zawartości)
+    #[arg(long)]
+    no_empty: bool,
+
     /// Tylko repozytoria z opisem
     #[arg(long)]
     has_description: bool,
@@ -80,6 +84,9 @@ struct Repo {
     stargazers_count: u64,
     #[serde(default)]
     forks_count: u64,
+    /// Rozmiar repozytorium w kilobajtach; 0 oznacza repozytorium bez zawartości.
+    #[serde(default)]
+    size: u64,
     #[serde(default)]
     fork: bool,
     #[serde(default)]
@@ -97,6 +104,7 @@ struct RepoOut {
     language: Option<String>,
     stars: u64,
     forks: u64,
+    size: u64,
     fork: bool,
     archived: bool,
 }
@@ -110,6 +118,7 @@ impl From<&Repo> for RepoOut {
             language: repo.language.clone(),
             stars: repo.stargazers_count,
             forks: repo.forks_count,
+            size: repo.size,
             fork: repo.fork,
             archived: repo.archived,
         }
@@ -256,6 +265,9 @@ fn matches(repo: &Repo, cli: &Cli) -> bool {
     if cli.no_archived && repo.archived {
         return false;
     }
+    if cli.no_empty && repo.size == 0 {
+        return false;
+    }
     if cli.has_description {
         let described = repo.description.as_deref().is_some_and(|d| !d.trim().is_empty());
         if !described {
@@ -320,6 +332,16 @@ mod tests {
     fn rejects_archived_when_asked() {
         let repo = parse(r#"{"id":3,"full_name":"a/b","html_url":"u","archived":true}"#);
         assert!(!matches(&repo, &cli(&["--no-archived"])));
+    }
+
+    #[test]
+    fn rejects_empty_repos_when_asked() {
+        let empty = parse(r#"{"id":9,"full_name":"a/b","html_url":"u","size":0}"#);
+        assert!(!matches(&empty, &cli(&["--no-empty"])));
+        assert!(matches(&empty, &cli(&[])));
+
+        let filled = parse(r#"{"id":10,"full_name":"a/b","html_url":"u","size":42}"#);
+        assert!(matches(&filled, &cli(&["--no-empty"])));
     }
 
     #[test]

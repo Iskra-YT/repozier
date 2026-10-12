@@ -38,6 +38,7 @@ OPTIONS:
         --min-stars <N>      Minimalna liczba gwiazdek [default: 0]
         --no-forks           Pomijaj forki
         --no-archived        Pomijaj zarchiwizowane
+        --no-empty           Pomijaj puste repozytoria (bez zawartości)
         --has-description    Tylko repozytoria z opisem
         --json               Wypisz wynik jako JSON
         --open               Otwórz link w przeglądarce
@@ -60,6 +61,12 @@ Trzy losowe repozytoria w Pythonie, bez forków:
 
 ```console
 $ repozier -n 3 --language python --no-forks
+```
+
+Repozytorium z rzeczywistą zawartością (pomijając puste):
+
+```console
+$ repozier --no-empty
 ```
 
 Wynik jako JSON (np. do dalszego przetwarzania):
